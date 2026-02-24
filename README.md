@@ -11,7 +11,7 @@ int size = 4096;
 which will create a 4096x4096 sprase matrix witha 3% infill of random numbers.
 
 ## Build the program
-The included makefile has some variables for locations of CUDA, Armadillo, and the SuperLU library install locations, edit these for your system.
+The included makefile has some variables for locations of CUDA, Armadillo, and the SuperLU library install locations, edit these locations for your system.
 
 ```bash
 CUDA_HOME ?= /usr
