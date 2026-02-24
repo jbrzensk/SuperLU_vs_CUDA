@@ -1,25 +1,49 @@
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <cuda_runtime.h>
 #include "cusolverSp.h"
 #include "cusparse.h"
 #include "cudaarmwrappers.h"
 #include <sys/time.h>
 
+#define CUDA_CHECK(call) \
+    do { \
+        cudaError_t _err = (call); \
+        if (_err != cudaSuccess) { \
+            fprintf(stderr, "CUDA error at %s:%d: %s\n", \
+                    __FILE__, __LINE__, cudaGetErrorString(_err)); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while(0)
 
+#define CUSPARSE_CHECK(call) \
+    do { \
+        cusparseStatus_t _err = (call); \
+        if (_err != CUSPARSE_STATUS_SUCCESS) { \
+            fprintf(stderr, "cuSPARSE error at %s:%d: %s\n", \
+                    __FILE__, __LINE__, cusparseGetErrorString(_err)); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while(0)
 
-
+#define CUSOLVER_CHECK(call) \
+    do { \
+        cusolverStatus_t _err = (call); \
+        if (_err != CUSOLVER_STATUS_SUCCESS) { \
+            fprintf(stderr, "cuSOLVER error at %s:%d: %d\n", \
+                    __FILE__, __LINE__, (int)_err); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while(0)
 
 namespace Wrapper {
 
     double* solveviacuda(
-            const double *values, 
-            const long long unsigned int  a_nnz, 
-            const long long unsigned int  rows, 
-            const long long unsigned int  cols, 
-            const long long unsigned int * row_ind, 
+            const double *values,
+            const long long unsigned int  a_nnz,
+            const long long unsigned int  rows,
+            const long long unsigned int  cols,
+            const long long unsigned int * row_ind,
             const long long unsigned int * col_ptrs,
             double * bpass,
             double * xreturn){
@@ -49,8 +73,8 @@ namespace Wrapper {
         h_cscVal = (double *)malloc(sizeof(double) * nnz);
         memcpy(h_cscVal,values,sizeof(double)*nnz);
 
-        //Print Statement to verify casting worked 
-        /* 
+        //Print Statement to verify casting worked
+        /*
            printf("CSC Known Good Input:\n");
            for(int j = 0 ; j < nnz; j++){
            printf("(%llu, %llu, %f) \n", row_ind[j], col_ptrs[row_ind[j]],  values[j] );
@@ -75,51 +99,35 @@ namespace Wrapper {
         int * d_csrRowPtr = NULL;
         int * d_csrColInd = NULL;
 
-        cusparseStatus_t status = CUSPARSE_STATUS_SUCCESS; 
         cusparseHandle_t  sphandle = NULL;
-        status = cusparseCreate(&sphandle);
-        assert(CUSPARSE_STATUS_SUCCESS == status);
-
-        cudaError_t cudaStat1 = cudaSuccess;
-        cudaError_t cudaStat2 = cudaSuccess;
-        cudaError_t cudaStat3 = cudaSuccess;
-        cudaError_t cudaStat4 = cudaSuccess;
-        cudaError_t cudaStat5 = cudaSuccess;
-        cudaError_t cudaStat6 = cudaSuccess;
+        CUSPARSE_CHECK(cusparseCreate(&sphandle));
 
         //Allocate for both CSC and CSR formats
-        cudaStat1 = cudaMalloc ((void**)&d_cscVal, sizeof(double) * nnz );
-        cudaStat3 = cudaMalloc ((void**)&d_csccol_pts, sizeof(int) * (cols+1));
-        cudaStat4 = cudaMalloc ((void**)&d_cscRowInd, sizeof( int) * nnz);
-        cudaStat2 = cudaMalloc ((void**)&d_csrvalues, sizeof(double) * nnz);
-        cudaStat5 = cudaMalloc ((void**)&d_csrRowPtr, sizeof(int) * (rows+1));
-        cudaStat6 = cudaMalloc ((void**)&d_csrColInd, sizeof(int) * nnz);
-        assert(cudaSuccess == cudaStat1);
-        assert(cudaSuccess == cudaStat2);
-        assert(cudaSuccess == cudaStat3);
-        assert(cudaSuccess == cudaStat4);
-        assert(cudaSuccess == cudaStat5);
-        assert(cudaSuccess == cudaStat6);
+        CUDA_CHECK(cudaMalloc((void**)&d_cscVal, sizeof(double) * nnz));
+        CUDA_CHECK(cudaMalloc((void**)&d_csccol_pts, sizeof(int) * (cols+1)));
+        CUDA_CHECK(cudaMalloc((void**)&d_cscRowInd, sizeof(int) * nnz));
+        CUDA_CHECK(cudaMalloc((void**)&d_csrvalues, sizeof(double) * nnz));
+        CUDA_CHECK(cudaMalloc((void**)&d_csrRowPtr, sizeof(int) * (rows+1)));
+        CUDA_CHECK(cudaMalloc((void**)&d_csrColInd, sizeof(int) * nnz));
 
         //For CSR2CSC
         cusparseIndexBase_t  idxBase = CUSPARSE_INDEX_BASE_ZERO;
-        cusparseAction_t     copyValues = CUSPARSE_ACTION_NUMERIC; // or numeric 
-        cusparseCsr2CscAlg_t alg = CUSPARSE_CSR2CSC_ALG1;   
+        cusparseAction_t     copyValues = CUSPARSE_ACTION_NUMERIC; // or numeric
+        cusparseCsr2CscAlg_t alg = CUSPARSE_CSR2CSC_ALG1;
         cudaDataType         valType = CUDA_R_64F;
 
-
-        cudaStat1 = cudaMemcpy(d_cscVal, h_cscVal, sizeof(double)*nnz, cudaMemcpyHostToDevice);
-        cudaStat1 = cudaMemcpy(d_csccol_pts, h_csccol_pts, sizeof(int)*(cols+1), cudaMemcpyHostToDevice);
-        cudaStat1 = cudaMemcpy(d_cscRowInd, h_cscRowInd, sizeof(int)*nnz, cudaMemcpyHostToDevice);
+        CUDA_CHECK(cudaMemcpy(d_cscVal, h_cscVal, sizeof(double)*nnz, cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_csccol_pts, h_csccol_pts, sizeof(int)*(cols+1), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_cscRowInd, h_cscRowInd, sizeof(int)*nnz, cudaMemcpyHostToDevice));
 
         cusparseMatDescr_t descrA = NULL;
-        cusparseCreateMatDescr(&descrA);
-        cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL);
-        cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ZERO);  
+        CUSPARSE_CHECK(cusparseCreateMatDescr(&descrA));
+        CUSPARSE_CHECK(cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL));
+        CUSPARSE_CHECK(cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ZERO));
 
         //Compute buffersize required by CSR2CSC
-        status = cusparseCsr2cscEx2_bufferSize( 
-                sphandle, 
+        CUSPARSE_CHECK(cusparseCsr2cscEx2_bufferSize(
+                sphandle,
                 cols,//h
                 rows,//h
                 nnz,//h
@@ -133,23 +141,19 @@ namespace Wrapper {
                 copyValues,
                 idxBase,
                 alg,
-                &h_buffer);
+                &h_buffer));
 
-        assert(CUSPARSE_STATUS_SUCCESS == status);
-
-        cudaStat1 = cudaDeviceSynchronize();     
-        assert(cudaSuccess == cudaStat1);
+        CUDA_CHECK(cudaDeviceSynchronize());
         //I don't know why cuda cant just allocate this on the buffer in the above function.
-        cudaStat1 = cudaMalloc((void**)&d_buffer, sizeof(double)*h_buffer);
-        assert(cudaSuccess == cudaStat1);
+        CUDA_CHECK(cudaMalloc((void**)&d_buffer, sizeof(double)*h_buffer));
 
         //Perform actual conversion
         /*The documentation states that this function will also work to convert CSC2CSR
           but provides no explaination of how. It states that CSR is really just the transpose of
           CSC so this function will work for either one. It performs this by just copying over the col
-          and row indices and REARRANGING THE ELEMENT VALUES. This is not intuitive. And a lesson learned. 
+          and row indices and REARRANGING THE ELEMENT VALUES. This is not intuitive. And a lesson learned.
          */
-        status = cusparseCsr2cscEx2(
+        CUSPARSE_CHECK(cusparseCsr2cscEx2(
                 sphandle,
                 cols,//Cols and rows are switched here because its csc 2 csr
                 rows,
@@ -164,13 +168,9 @@ namespace Wrapper {
                 copyValues,
                 idxBase,
                 alg,
-                d_buffer);
+                d_buffer));
 
-        assert(CUSPARSE_STATUS_SUCCESS == status);
-
-
-        cudaStat1 = cudaDeviceSynchronize();     
-        assert(cudaSuccess == cudaStat1);
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         //Copy values back to host to see if CSR2CSC worked
         /*
@@ -178,22 +178,18 @@ namespace Wrapper {
         int     * h_csrRowPtr;
         int     * h_csrColInd;
 
-        h_csrvalues = (double *)malloc(sizeof(double) * nnz); 
+        h_csrvalues = (double *)malloc(sizeof(double) * nnz);
         h_csrRowPtr = (int *)malloc(sizeof(int) * (rows+1));
         h_csrColInd = (int *)malloc(sizeof(int) * nnz);
 
-        cudaStat1 = cudaMemcpy(h_csrvalues, d_csrvalues, sizeof(double)*nnz, cudaMemcpyDeviceToHost);
-        cudaStat2 = cudaMemcpy(h_csrRowPtr, d_csrRowPtr, sizeof(int)*(rows+1), cudaMemcpyDeviceToHost);
-        cudaStat3 = cudaMemcpy(h_csrColInd, d_csrColInd, sizeof(int)*nnz, cudaMemcpyDeviceToHost);
-        assert(cudaSuccess == cudaStat1);
-        assert(cudaSuccess == cudaStat2);
-        assert(cudaSuccess == cudaStat3);
+        CUDA_CHECK(cudaMemcpy(h_csrvalues, d_csrvalues, sizeof(double)*nnz, cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(h_csrRowPtr, d_csrRowPtr, sizeof(int)*(rows+1), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(h_csrColInd, d_csrColInd, sizeof(int)*nnz, cudaMemcpyDeviceToHost));
     */
-        cudaStat1 = cudaDeviceSynchronize();     
-        assert(cudaSuccess == cudaStat1);   
+        CUDA_CHECK(cudaDeviceSynchronize());
 
-        //cudaStat1 = cudaMemcpy(h_cscVal, d_cscVal, sizeof(double)*nnz, cudaMemcpyDeviceToHost);
-        //Print statement to see if it works. 
+        //cudaMemcpy(h_cscVal, d_cscVal, sizeof(double)*nnz, cudaMemcpyDeviceToHost);
+        //Print statement to see if it works.
         /*
            printf("After CSC to CSR\n");
            for(int j = 0 ; j < nnz; j++){
@@ -203,12 +199,11 @@ namespace Wrapper {
 
         //cusolver and cusparse are different libraries and need a different handle.
         cusolverSpHandle_t solhandle = NULL;
-        cusolverSpCreate(&solhandle);
+        CUSOLVER_CHECK(cusolverSpCreate(&solhandle));
 
         //Allocate for b of Ax=b on the device.
         double * d_b = NULL;
-        cudaStat1 = cudaMalloc((void**)&d_b, sizeof(double)*rows);
-        assert(cudaSuccess == cudaStat1);
+        CUDA_CHECK(cudaMalloc((void**)&d_b, sizeof(double)*rows));
 
         //Required for QR solver
         double tol = 1.e-12;
@@ -217,31 +212,27 @@ namespace Wrapper {
 
         //Allocate for x of Ax=b on the device
         double * d_x = NULL;
-        cudaStat1 = cudaMalloc((void**)&d_x, sizeof(double)*rows);
-        assert(cudaSuccess == cudaStat1);   
+        CUDA_CHECK(cudaMalloc((void**)&d_x, sizeof(double)*rows));
 
         //copy values from host to device
-        cudaStat1 = cudaMemcpy(d_b, bpass, sizeof(double)*cols, cudaMemcpyHostToDevice);
+        CUDA_CHECK(cudaMemcpy(d_b, bpass, sizeof(double)*cols, cudaMemcpyHostToDevice));
 
         cudaDeviceSynchronize();//For timing
 
-
-        cusolverStatus_t status1 = CUSOLVER_STATUS_SUCCESS; 
         gettimeofday(&t1, 0);
-        status1 = cusolverSpDcsrlsvqr(
-                solhandle, 
-                cols, 
+        CUSOLVER_CHECK(cusolverSpDcsrlsvqr(
+                solhandle,
+                cols,
                 nnz,
-                descrA, 
-                d_csrvalues, 
-                d_csrRowPtr, 
+                descrA,
+                d_csrvalues,
+                d_csrRowPtr,
                 d_csrColInd,
-                d_b, 
-                tol, 
-                reorder, 
-                d_x, 
-                &singularity);
-
+                d_b,
+                tol,
+                reorder,
+                d_x,
+                &singularity));
 
         cudaDeviceSynchronize();//for timing
         gettimeofday(&t2, 0);
@@ -251,13 +242,11 @@ namespace Wrapper {
             printf("WARNING: the matrix is singular at row %d under tol (%E)\n", singularity, tol);
         }
 
-        assert(cudaSuccess == status1);   
-
         double time = (1000000.0*(t2.tv_sec-t1.tv_sec) + t2.tv_usec-t1.tv_usec)/1e6;
         printf("Time to solve:  %3.1f s \n", time);
 
         xreturn   = (double*)malloc(sizeof(double)*cols);
-        cudaStat1 = cudaMemcpy(xreturn, d_x, sizeof(double)*cols, cudaMemcpyDeviceToHost);  
+        CUDA_CHECK(cudaMemcpy(xreturn, d_x, sizeof(double)*cols, cudaMemcpyDeviceToHost));
 
         if (solhandle) { cusolverSpDestroy(solhandle); }
         if (sphandle) { cusparseDestroy(sphandle); }
@@ -266,8 +255,6 @@ namespace Wrapper {
        if (h_cscVal  ) { free(h_cscVal); }
        if (h_csccol_pts) { free(h_csccol_pts); }
        if (h_cscRowInd) { free(h_cscRowInd); }
-
-
 
         if (d_cscVal   ) { cudaFree(d_cscVal); }
         if (d_csccol_pts) { cudaFree(d_csccol_pts); }
