@@ -19,7 +19,7 @@ CUDA_INCLUDE := $(CUDA_HOME)/include
 CUDA_LIB := $(CUDA_HOME)/lib/x86_64-linux-gnu
 CUDA_ARCH ?= sm_89
 
-ARMA_HOME ?= /home/jbrzensk/USERS
+ARMA_HOME ?= /home/alt/USERS
 ARMA_INCLUDE := $(ARMA_HOME)/include
 ARMA_LIB := $(ARMA_HOME)/lib
 SUPERLU_LIB = $(ARMA_LIB)
