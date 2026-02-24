@@ -48,6 +48,12 @@ namespace Wrapper {
             double * bpass,
             double * xreturn){
 
+        if (a_nnz == 0 || rows == 0 || cols == 0) {
+            fprintf(stderr, "solveviacuda: invalid dimensions (nnz=%llu rows=%llu cols=%llu)\n",
+                    a_nnz, rows, cols);
+            return nullptr;
+        }
+
         //Values for timing
         struct timeval t1, t2;
 
