@@ -4,8 +4,6 @@
 #include <stdio.h>
 
 namespace Wrapper {
-    
-    
     double* solveviacuda(
             const double *values, 
             const long long unsigned int  a_nnz, 
