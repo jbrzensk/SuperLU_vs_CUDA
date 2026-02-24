@@ -48,7 +48,6 @@ namespace Wrapper {
             double * bpass,
             double * xreturn){
 
-
         //Values for timing
         struct timeval t1, t2;
 
@@ -72,21 +71,6 @@ namespace Wrapper {
         //Since values are of same size a simple memcpy works
         h_cscVal = (double *)malloc(sizeof(double) * nnz);
         memcpy(h_cscVal,values,sizeof(double)*nnz);
-
-        //Print Statement to verify casting worked
-        /*
-           printf("CSC Known Good Input:\n");
-           for(int j = 0 ; j < nnz; j++){
-           printf("(%llu, %llu, %f) \n", row_ind[j], col_ptrs[row_ind[j]],  values[j] );
-           }
-
-
-           printf("After cast, Before CSC to CSR\n");
-           for(int j = 0 ; j < nnz; j++){
-           printf("(%d, %d, %f) \n", h_cscRowInd[j], h_csccol_pts[h_cscRowInd[j]], h_cscVal[j] );
-           }
-         */
-
 
         //Required values for CSR2CSC
         size_t h_buffer = 0;    //size of workspace
@@ -172,31 +156,6 @@ namespace Wrapper {
 
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        //Copy values back to host to see if CSR2CSC worked
-        /*
-        double  * h_csrvalues;
-        int     * h_csrRowPtr;
-        int     * h_csrColInd;
-
-        h_csrvalues = (double *)malloc(sizeof(double) * nnz);
-        h_csrRowPtr = (int *)malloc(sizeof(int) * (rows+1));
-        h_csrColInd = (int *)malloc(sizeof(int) * nnz);
-
-        CUDA_CHECK(cudaMemcpy(h_csrvalues, d_csrvalues, sizeof(double)*nnz, cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(h_csrRowPtr, d_csrRowPtr, sizeof(int)*(rows+1), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(h_csrColInd, d_csrColInd, sizeof(int)*nnz, cudaMemcpyDeviceToHost));
-    */
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        //cudaMemcpy(h_cscVal, d_cscVal, sizeof(double)*nnz, cudaMemcpyDeviceToHost);
-        //Print statement to see if it works.
-        /*
-           printf("After CSC to CSR\n");
-           for(int j = 0 ; j < nnz; j++){
-           printf("(%d, %d, %f) \n", h_csrColInd[j], h_csrRowPtr[h_csrColInd[j]], h_csrvalues[j] );
-           }
-         */
-
         //cusolver and cusparse are different libraries and need a different handle.
         cusolverSpHandle_t solhandle = NULL;
         CUSOLVER_CHECK(cusolverSpCreate(&solhandle));
@@ -243,7 +202,7 @@ namespace Wrapper {
         }
 
         double time = (1000000.0*(t2.tv_sec-t1.tv_sec) + t2.tv_usec-t1.tv_usec)/1e6;
-        printf("Time to solve:  %3.1f s \n", time);
+        printf("cusparse time to solve:  %3.1f s \n", time);
 
         xreturn   = (double*)malloc(sizeof(double)*cols);
         CUDA_CHECK(cudaMemcpy(xreturn, d_x, sizeof(double)*cols, cudaMemcpyDeviceToHost));
@@ -252,9 +211,9 @@ namespace Wrapper {
         if (sphandle) { cusparseDestroy(sphandle); }
         if (descrA) { cusparseDestroyMatDescr(descrA); }
 
-       if (h_cscVal  ) { free(h_cscVal); }
-       if (h_csccol_pts) { free(h_csccol_pts); }
-       if (h_cscRowInd) { free(h_cscRowInd); }
+        if (h_cscVal  ) { free(h_cscVal); }
+        if (h_csccol_pts) { free(h_csccol_pts); }
+        if (h_cscRowInd) { free(h_cscRowInd); }
 
         if (d_cscVal   ) { cudaFree(d_cscVal); }
         if (d_csccol_pts) { cudaFree(d_csccol_pts); }

@@ -13,17 +13,24 @@ CUDA_ARCH ?= sm_89
 ARMA_HOME ?= /home/jbrzensk/USERS
 ARMA_INCLUDE := $(ARMA_HOME)/include
 ARMA_LIB := $(ARMA_HOME)/lib
+SUPERLU_LIB = $(ARMA_LIB)
 
 all: cs_comp.exe
 
 cs_comp.exe: gpusolve.o creatematrixarm.o
-	nvcc -o cs_comp.exe gpusolve.o creatematrixarm.o -L$(CUDA_LIB) -lcudart -lcusparse -lcusolver -llapack -lopenblas
+	nvcc -o cs_comp.exe gpusolve.o creatematrixarm.o \
+	-L$(CUDA_LIB) -lcudart -lcusparse -lcusolver -llapack -lopenblas \
+	-L$(ARMA_LIB) -lsuperlu \
+	-Xlinker -rpath -Xlinker $(ARMA_LIB)
     
 gpusolve.o:
 	nvcc -c -arch=$(CUDA_ARCH) -I$(CUDA_INCLUDE) gpusolve.cu -lcusolver
 
 creatematrixarm.o:
-	g++ creatematrixarm.cpp -c -O2 -I$(ARMA_INCLUDE) -DARMA_DONT_USE_WRAPPER -L$(ARMA_LIB) -lopenblas -llapack
+	g++ creatematrixarm.cpp -c -O2 \
+	-I$(ARMA_INCLUDE) -DARMA_DONT_USE_WRAPPER \
+	-L$(ARMA_LIB) -lopenblas -llapack \
+	-L$(SUPERLU_LIB) -lsuperlu
 
 
 clean:

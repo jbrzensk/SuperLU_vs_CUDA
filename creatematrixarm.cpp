@@ -19,7 +19,6 @@
  
 #include <iostream>
 #include <armadillo>
-#include "cusparse.h"
 #include "cudaarmwrappers.h"
 #include <chrono>
 
@@ -31,7 +30,13 @@ int main()
 {
     //Define A and b of Ax=b
 
-    int size = 8192;
+    int size = 4096;
+    
+    cout << "**********************************************************" << endl;
+    cout << "Creating a random sparse matrix of size " << size << "x" << size 
+         << " with 3% density." << endl;
+    cout << "**********************************************************" << endl;
+
     sp_mat A = sprandn<sp_mat>(size, size, 0.03);
     vec b(size,      fill::randu);   
 
@@ -47,46 +52,74 @@ int main()
 
     mat Q;
     mat R;
+
+    /* Armadillo QR Decomposition Solve */
+    cout << "" << endl;
+    cout << "**********************************************************" << endl;
+    cout << "Doing QR solve (DENSE)..." << endl;
+    cout << "**********************************************************" << endl;
+
     auto start = high_resolution_clock::now();
     qr(Q, R, Adense);
     vec x = R.i()*(Q.t()*b);
     auto stop = high_resolution_clock::now();
 
     auto duration = duration_cast<microseconds>(stop - start);
-    cout << "Time taken by Armadillo QR:" << duration.count()/1e6 << " seconds" << endl;  
+    cout << "Time taken by Armadillo QR solve:" << duration.count()/1e6 << " seconds" << endl;  
 
-    //Toy example code
-    //Adense.print("ARMA::Adense:");
-    //x.print("ARMA:QR:x:");
-
+    /* Super LU First solve */
+    cout << "" << endl;
+    cout << "**********************************************************" << endl;
+    cout << "Doing SuperLU solve..." << endl;
+    cout << "**********************************************************" << endl;
+    vec x1;
     start = high_resolution_clock::now();
-    vec x1 = solve(Adense, b);
+    spsolve( x1,A,b);
     stop = high_resolution_clock::now();
-
     duration = duration_cast<microseconds>(stop - start);
-    cout << "Time taken by Armadillo solver:" << duration.count()/1e6 << " seconds" << endl;  
+    cout << "Time taken by SuperLU:" << duration.count()/1e6 << " seconds" << endl;  
+   
+   
+    cout << "" << endl;
+    cout << "**********************************************************" << endl;
+    cout << "Doing SuperLU Factorization and Solve..." << endl;
+    cout << "**********************************************************" << endl;
+    vec x3;
+    spsolve_factoriser SF;
+    
+    start = high_resolution_clock::now();
+    bool status = SF.factorise(A);
+    if( status == false ){
+        cout << "Factorization failed. Exiting." << endl;
+        return -1;
+    }
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout << "Time taken by factorization:" << duration.count()/1e6 << " seconds" << endl;  
 
-    //Toy example sections
-    //b.print("arma::B:");
-    //x.print("ARMA::QRsolve::x:");
-    //x1.print("ARMA::solve::x1:");
+    double rcond_value = SF.rcond();
+    cout << "Reciprocal of condition number: " << rcond_value << endl;
+    start = high_resolution_clock::now();
+    bool solution_status = SF.solve(x3, b);
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    if(solution_status == false) { cout << "couldn't find X3" << endl; }
+    cout << "Time taken by SuperLU factored:" << duration.count()/1e6 << " seconds" << endl;  
+
+    vec x4;
+    start = high_resolution_clock::now();
+    solution_status = SF.solve(x4, b);
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    if(solution_status == false) { cout << "couldn't find X4" << endl; }
+    cout << "Time taken by SuperLU factored secodn time:" << duration.count()/1e6 << " seconds" << endl;  
 
     vec result;
     result = x1-x;
     double normof2arms = norm(result,1);
-    cout << "L1 Norm of both the armadillo computations:" << normof2arms << endl;
+    cout << "L1 Norm of QR and SuperLU solutions:" << normof2arms << endl;
 
 
-    //Toy example: convert dense matrix to sparse
-    //sp_mat A(Adense);    
-
-    /*
-     *
-     *IF YOU WANT TO JUST USE THE CODE YOU CAN PRETTY MUCH IGNORE THE REST OF THIS FILE.
-     *BETWEEN THIS COMMENT BLOCK AND THE NEXT IS THE CODE TO USE THE FUNCTION, PLUS THE TIMING CODE.
-     *ALL YOU NEED ARE AN SP_MAT A, VEC B, AND A DOUBLE POINTER FOR X.
-     *
-     */
     //Grab all the elements of A, A is stored in CSC format. 
     const double * values = A.values;
     const long long unsigned int nnz = A.n_nonzero;
@@ -97,16 +130,17 @@ int main()
     double *bpass = b.memptr();//Convert B from Armadillo Vec to standard array of doubles
     double * xreturn = NULL;
 
+    cout << "" << endl;
+    cout << "**********************************************************" << endl;
+    cout << "Doing cusparse solve..." << endl;
+    cout << "**********************************************************" << endl;
+
     start = high_resolution_clock::now();
     xreturn = Wrapper::solveviacuda(values, nnz, rows, cols, row_indices, col_ptrs, bpass, xreturn);   
     stop = high_resolution_clock::now();
-    /*
-     *I KNOW YOU HATE COMMENTS SO IF YOU WANT JUST READ BETWEEN THESE TWO BLOCKS. THE REST OF THIS
-     *FILE IS PRETTY BOILER PLATE. 
-     *
-     */
+
     duration = duration_cast<microseconds>(stop - start);
-    cout << "Total time take from CUDA function call:" << duration.count()/1e6 << " seconds" << endl;  
+    cout << "Total time take from ENTIRE CUDA function call:" << duration.count()/1e6 << " seconds" << endl;  
 
 
     vec rfc(&xreturn[0], size);//THIS IS HOW YOU SHOVE A DOUBLE ARRAY BACK INTO AN ARMADILLO VEC CLASS
@@ -114,31 +148,5 @@ int main()
     double normavc = norm(result,1);
     cout << "L1 Norm of Armadillo compared with Cuda computations:" << normavc << endl;
 
-
-    /* MORE TOY EXAMPLE TROUBLE SHOOTING CODE */
-    //vec returnedfromcuda(3);
-    //returnedfromcuda.memptr()=xreturn;
-    //rfc.print("Final Print?");
-    //Print Statements to compare results
-
-    /*
-       cout << "XRETURN FROM ARMA" << endl;
-       for(int j = 0 ; j < 3; j++){
-       printf("( %f) \n",  xreturn[j] );
-       }
-     */
-
-    /*
-
-       A.print("A in ARMA:");
-       for(int j = 0 ; j < 3; j++){
-       printf("( %f) \n",  bpass[j] );
-       }
-
-       printf("IN ARMA \n");
-       for(int j = 0 ; j < nnz; j++){
-       printf("(%llu, %llu, %f) \n", row_indices[j], col_ptrs[row_indices[j]],  values[j] );
-       }
-     */
     return 0;
 }
