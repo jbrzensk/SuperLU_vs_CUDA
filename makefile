@@ -8,6 +8,7 @@
 CUDA_HOME ?= /usr
 CUDA_INCLUDE := $(CUDA_HOME)/include
 CUDA_LIB := $(CUDA_HOME)/lib/x86_64-linux-gnu
+CUDA_ARCH ?= sm_89
 
 ARMA_HOME ?= /home/jbrzensk/USERS
 ARMA_INCLUDE := $(ARMA_HOME)/include
@@ -19,7 +20,7 @@ cs_comp.exe: gpusolve.o creatematrixarm.o
 	nvcc -o cs_comp.exe gpusolve.o creatematrixarm.o -L$(CUDA_LIB) -lcudart -lcusparse -lcusolver -llapack -lopenblas
     
 gpusolve.o:
-	nvcc -c -I$(CUDA_INCLUDE) gpusolve.cu -lcusolver
+	nvcc -c -arch=$(CUDA_ARCH) -I$(CUDA_INCLUDE) gpusolve.cu -lcusolver
 
 creatematrixarm.o:
 	g++ creatematrixarm.cpp -c -O2 -I$(ARMA_INCLUDE) -DARMA_DONT_USE_WRAPPER -L$(ARMA_LIB) -lopenblas -llapack
