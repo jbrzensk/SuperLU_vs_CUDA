@@ -177,6 +177,24 @@ int main() {
   double normavc = norm(result, 1);
   cout << "L1 Norm of Armadillo compared with Cuda computations:" << normavc
        << endl;
+       
+  // Relative residual: ||A*x - b|| / ||b||
+  // Values near machine epsilon (~1e-15) are excellent.
+  // Values above ~1e-6 suggest the solver struggled (ill-conditioned matrix).
+  // Values near 1e-9 are good enough for modeling.
+  double bnorm = norm(b, 2);
+  vec residual_superlu = A * x1 - b;
+  cout << "SuperLU   relative residual ||Ax-b||/||b||: "
+       << norm(residual_superlu, 2) / bnorm << endl;
+
+  vec residual_cuda = A * rfc - b;
+  double rel_res_cuda = norm(residual_cuda, 2) / bnorm;
+  cout << "CUDA      relative residual ||Ax-b||/||b||: " << rel_res_cuda << endl;
+
+  if (rel_res_cuda > 1e-4) {
+    cout << "WARNING: CUDA solution relative residual > 1e-4 "
+            "(matrix may be ill-conditioned for LU)" << endl;
+  }
 
   return 0;
 }
