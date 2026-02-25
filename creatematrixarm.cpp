@@ -145,7 +145,7 @@ int main() {
        << duration.count() / 1e6 << " seconds" << endl;
 
   vec rfc(&xreturn[0], size); // THIS IS HOW YOU SHOVE A DOUBLE ARRAY BACK INTO
-                              // AN ARMADILLO VEC CLASS
+                                                  // AN ARMADILLO VEC CLASS
   result = x1 - rfc;
   double normavc = norm(result, 1);
   cout << "L1 Norm of Armadillo compared with Cuda computations:" << normavc
